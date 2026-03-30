@@ -28,6 +28,8 @@ export async function POST(request: NextRequest) {
       fatherId: body.fatherId ?? null,
       motherId: body.motherId ?? null,
       birthDate: body.birthDate ?? null,
+      spouseId: body.spouseId ?? null,
+      gender: (body.gender as "L" | "P" | null) ?? null,
     });
     return Response.json({ member }, { status: 201 });
   } catch (err) {

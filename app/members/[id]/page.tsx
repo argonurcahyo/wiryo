@@ -6,6 +6,7 @@
 
 import { notFound } from "next/navigation";
 import { getMemberById, getAllMembers } from "@/lib/members";
+import { getRelationshipsForMember, getMemberPartnerSummaries } from "@/lib/relationships";
 import MemberDetailClient from "./MemberDetailClient";
 
 interface PageProps {
@@ -20,9 +21,10 @@ export default async function MemberDetailPage({
   const { id } = await params;
   const { edit } = await searchParams;
 
-  const [member, allMembers] = await Promise.all([
+  const [member, allMembers, relationships] = await Promise.all([
     getMemberById(id),
     getAllMembers(),
+    getRelationshipsForMember(id),
   ]);
 
   if (!member) notFound();
@@ -33,6 +35,7 @@ export default async function MemberDetailPage({
   const children = allMembers.filter(
     (m) => m.fatherId === id || m.motherId === id
   );
+  const partners = getMemberPartnerSummaries(member, allMembers, relationships);
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-10">
@@ -41,6 +44,7 @@ export default async function MemberDetailPage({
         allMembers={allMembers}
         father={father ?? null}
         mother={mother ?? null}
+        partners={partners}
         children={children}
         startInEditMode={edit === "true"}
       />

@@ -15,6 +15,8 @@ export interface Member {
   fatherId: string | null;
   motherId: string | null;
   birthDate: string | null;
+  spouseId: string | null;
+  gender: "L" | "P" | null;
   createdAt?: string;
 }
 
@@ -23,6 +25,8 @@ export interface CreateMemberInput {
   fatherId?: string | null;
   motherId?: string | null;
   birthDate?: string | null;
+  spouseId?: string | null;
+  gender?: "L" | "P" | null;
 }
 
 export interface UpdateMemberInput {
@@ -30,6 +34,8 @@ export interface UpdateMemberInput {
   fatherId?: string | null;
   motherId?: string | null;
   birthDate?: string | null;
+  spouseId?: string | null;
+  gender?: "L" | "P" | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -42,6 +48,8 @@ function rowToMember(row: Record<string, unknown>): Member {
     fatherId: (row.fatherId as string | null) ?? null,
     motherId: (row.motherId as string | null) ?? null,
     birthDate: (row.birthDate as string | null) ?? null,
+    spouseId: (row.spouseId as string | null) ?? null,
+    gender: (row.gender as "L" | "P" | null) ?? null,
     createdAt: (row.createdAt as string | undefined),
   };
 }
@@ -120,14 +128,16 @@ export async function createMember(input: CreateMemberInput): Promise<Member> {
   }
 
   await db.execute({
-    sql: `INSERT INTO members (id, name, fatherId, motherId, birthDate)
-          VALUES (?, ?, ?, ?, ?)`,
+    sql: `INSERT INTO members (id, name, fatherId, motherId, birthDate, spouseId, gender)
+          VALUES (?, ?, ?, ?, ?, ?, ?)`,
     args: [
       id,
       name,
       input.fatherId ?? null,
       input.motherId ?? null,
       input.birthDate ?? null,
+      input.spouseId ?? null,
+      input.gender ?? null,
     ],
   });
 
@@ -149,6 +159,8 @@ export async function updateMember(
 
   const fatherId = "fatherId" in input ? input.fatherId : existing.fatherId;
   const motherId = "motherId" in input ? input.motherId : existing.motherId;
+  const spouseId = "spouseId" in input ? input.spouseId : existing.spouseId;
+  const gender = "gender" in input ? (input.gender ?? null) : existing.gender;
 
   // Self-reference guard
   if (fatherId === id || motherId === id) {
@@ -165,9 +177,9 @@ export async function updateMember(
 
   await db.execute({
     sql: `UPDATE members
-          SET name = ?, fatherId = ?, motherId = ?, birthDate = ?
+          SET name = ?, fatherId = ?, motherId = ?, birthDate = ?, spouseId = ?, gender = ?
           WHERE id = ?`,
-    args: [name, fatherId ?? null, motherId ?? null, input.birthDate ?? existing.birthDate ?? null, id],
+    args: [name, fatherId ?? null, motherId ?? null, input.birthDate ?? existing.birthDate ?? null, spouseId ?? null, gender, id],
   });
 
   return (await getMemberById(id))!;
@@ -177,7 +189,7 @@ export async function updateMember(
 export async function deleteMember(id: string): Promise<boolean> {
   await initDb();
 
-  // Nullify parent references in children before deleting
+  // Nullify parent and spouse references before deleting
   await db.execute({
     sql: "UPDATE members SET fatherId = NULL WHERE fatherId = ?",
     args: [id],
@@ -185,6 +197,14 @@ export async function deleteMember(id: string): Promise<boolean> {
   await db.execute({
     sql: "UPDATE members SET motherId = NULL WHERE motherId = ?",
     args: [id],
+  });
+  await db.execute({
+    sql: "UPDATE members SET spouseId = NULL WHERE spouseId = ?",
+    args: [id],
+  });
+  await db.execute({
+    sql: "DELETE FROM partner_relationships WHERE memberAId = ? OR memberBId = ?",
+    args: [id, id],
   });
 
   const result = await db.execute({

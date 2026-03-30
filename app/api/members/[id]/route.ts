@@ -33,6 +33,8 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       fatherId: body.fatherId,
       motherId: body.motherId,
       birthDate: body.birthDate,
+      spouseId: body.spouseId,
+      gender: body.gender as "L" | "P" | undefined,
     });
     return Response.json({ member });
   } catch (err) {

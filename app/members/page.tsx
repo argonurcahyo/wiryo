@@ -5,13 +5,32 @@
  */
 
 import { getAllMembers } from "@/lib/members";
+import { getAllRelationships } from "@/lib/relationships";
 import TreeView from "@/components/Tree/TreeView";
 import MembersClient from "./MembersClient";
 
 export const dynamic = "force-dynamic"; // always fetch fresh data
 
-export default async function MembersPage() {
-  const members = await getAllMembers();
+interface PageProps {
+  searchParams: Promise<{ add?: string }>;
+}
+
+export default async function MembersPage({ searchParams }: PageProps) {
+  const { add } = await searchParams;
+
+  let members: Awaited<ReturnType<typeof getAllMembers>> = [];
+  let relationships: Awaited<ReturnType<typeof getAllRelationships>> = [];
+  let dbError: string | null = null;
+
+  try {
+    [members, relationships] = await Promise.all([
+      getAllMembers(),
+      getAllRelationships(),
+    ]);
+  } catch (err) {
+    console.error("[MembersPage] getAllMembers failed:", err);
+    dbError = err instanceof Error ? err.message : "Database connection failed.";
+  }
 
   return (
     <main className="mx-auto w-full max-w-5xl space-y-10 px-4 py-10">
@@ -27,12 +46,20 @@ export default async function MembersPage() {
         </div>
       </div>
 
-      {/* Tree visualisation (client component handles search + collapse) */}
+      {/* DB error banner */}
+      {dbError && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+          ⚠️ Could not load data: {dbError}. Check your{" "}
+          <code className="font-mono">.env</code> file and Turso credentials.
+        </div>
+      )}
+
+      {/* Tree visualisation */}
       <section>
         <h2 className="mb-4 text-xl font-semibold text-zinc-800 dark:text-zinc-200">
           Tree View
         </h2>
-        <TreeView members={members} />
+        <TreeView members={members} relationships={relationships} />
       </section>
 
       {/* Member list + add form */}
@@ -40,8 +67,8 @@ export default async function MembersPage() {
         <h2 className="mb-4 text-xl font-semibold text-zinc-800 dark:text-zinc-200">
           All Members
         </h2>
-        {/* Client component for interactive list, delete, and inline add form */}
-        <MembersClient initialMembers={members} />
+        {/* defaultOpen=true when coming from the home-page "Add First Member" link (?add=true) */}
+        <MembersClient initialMembers={members} defaultOpen={add === "true"} />
       </section>
     </main>
   );

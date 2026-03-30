@@ -22,8 +22,11 @@ interface FormState {
   name: string;
   fatherId: string;
   motherId: string;
-  birthDate: string;
+  birthDate: string; // stores year as string e.g. "1985"
+  gender: string;   // "L" | "P" | ""
 }
+
+const EMPTY_FORM: FormState = { name: "", fatherId: "", motherId: "", birthDate: "", gender: "" };
 
 export default function MemberForm({
   member,
@@ -34,15 +37,17 @@ export default function MemberForm({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const [form, setForm] = useState<FormState>({
-    name: member?.name ?? "",
-    fatherId: member?.fatherId ?? "",
-    motherId: member?.motherId ?? "",
-    birthDate: member?.birthDate ?? "",
-  });
+  const [form, setForm] = useState<FormState>(
+    member
+      ? { name: member.name, fatherId: member.fatherId ?? "", motherId: member.motherId ?? "", birthDate: member.birthDate ?? "", gender: member.gender ?? "" }
+      : EMPTY_FORM
+  );
 
   // Exclude self from parent options when editing
   const parentOptions = allMembers.filter((m) => m.id !== member?.id);
+  // Filter berdasarkan jenis kelamin: ayah hanya L atau tidak diketahui, ibu hanya P atau tidak diketahui
+  const fatherOptions = parentOptions.filter((m) => !m.gender || m.gender === "L");
+  const motherOptions = parentOptions.filter((m) => !m.gender || m.gender === "P");
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -59,6 +64,7 @@ export default function MemberForm({
       fatherId: form.fatherId || null,
       motherId: form.motherId || null,
       birthDate: form.birthDate || null,
+      gender: form.gender || null,
     };
 
     const isEdit = Boolean(member);
@@ -77,6 +83,11 @@ export default function MemberForm({
         if (!res.ok) {
           setError(data.error ?? "Something went wrong.");
           return;
+        }
+
+        // Reset form fields if adding a new member
+        if (!isEdit) {
+          setForm(EMPTY_FORM);
         }
 
         if (onSuccess) {
@@ -126,22 +137,47 @@ export default function MemberForm({
         />
       </div>
 
-      {/* Birth Date */}
+      {/* Birth Year */}
       <div>
         <label
           htmlFor="birthDate"
           className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
         >
-          Birth Date
+          Tahun Lahir
         </label>
         <input
           id="birthDate"
           name="birthDate"
-          type="date"
+          type="number"
+          min="1800"
+          max={new Date().getFullYear()}
           value={form.birthDate}
           onChange={handleChange}
-          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
+          placeholder="e.g. 1985"
+          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-500"
         />
+      </div>
+
+      {/* Gender */}
+      <div>
+        <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Jenis Kelamin
+        </label>
+        <div className="mt-2 flex flex-wrap gap-5">
+          {(["L", "P", ""] as const).map((val) => (
+            <label key={val} className="flex cursor-pointer items-center gap-1.5 text-sm text-zinc-700 dark:text-zinc-300">
+              <input
+                type="radio"
+                name="gender"
+                value={val}
+                checked={form.gender === val}
+                onChange={handleChange}
+                className="accent-emerald-600"
+              />
+              {val === "L" ? "Laki-laki" : val === "P" ? "Perempuan" : "Tidak diketahui"}
+            </label>
+          ))}
+        </div>
       </div>
 
       {/* Father */}
@@ -150,7 +186,7 @@ export default function MemberForm({
           htmlFor="fatherId"
           className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
         >
-          Father
+          Ayah
         </label>
         <select
           id="fatherId"
@@ -159,10 +195,10 @@ export default function MemberForm({
           onChange={handleChange}
           className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
         >
-          <option value="">— None —</option>
-          {parentOptions.map((m) => (
+          <option value="">— Tidak Ada —</option>
+          {fatherOptions.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.name}
+              {m.name}{m.birthDate ? ` (${m.birthDate})` : ""}
             </option>
           ))}
         </select>
@@ -174,7 +210,7 @@ export default function MemberForm({
           htmlFor="motherId"
           className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
         >
-          Mother
+          Ibu
         </label>
         <select
           id="motherId"
@@ -183,10 +219,10 @@ export default function MemberForm({
           onChange={handleChange}
           className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
         >
-          <option value="">— None —</option>
-          {parentOptions.map((m) => (
+          <option value="">— Tidak Ada —</option>
+          {motherOptions.map((m) => (
             <option key={m.id} value={m.id}>
-              {m.name}
+              {m.name}{m.birthDate ? ` (${m.birthDate})` : ""}
             </option>
           ))}
         </select>

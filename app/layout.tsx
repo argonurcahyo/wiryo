@@ -30,6 +30,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50">
@@ -59,13 +60,21 @@ export default function RootLayout({
           Wiryo Family Tree · Built with Next.js &amp; Turso
         </footer>
 
-        {/* ── PWA service worker registration ── */}
+        {/* ── PWA service worker ── */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function () {
-                  navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+                  if (${process.env.NODE_ENV === "production"}) {
+                    // Production: register the SW for offline support
+                    navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' });
+                  } else {
+                    // Development: unregister any stale SW so it never intercepts HMR/router traffic
+                    navigator.serviceWorker.getRegistrations().then(function (regs) {
+                      regs.forEach(function (r) { r.unregister(); });
+                    });
+                  }
                 });
               }
             `,

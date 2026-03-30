@@ -2,12 +2,12 @@
  * app/members/MembersClient.tsx
  * Interactive client component for the members list page:
  *  - Shows member cards with delete
- *  - Toggleable "Add Member" form
+ *  - Toggleable "Add Member" form (auto-opens when defaultOpen=true)
  */
 
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Member } from "@/lib/members";
 import MemberCard from "@/components/Member/MemberCard";
@@ -15,14 +15,27 @@ import MemberForm from "@/components/Member/MemberForm";
 
 interface MembersClientProps {
   initialMembers: Member[];
+  /** Auto-open the form on mount (e.g. from ?add=true URL param) */
+  defaultOpen?: boolean;
 }
 
-export default function MembersClient({ initialMembers }: MembersClientProps) {
+export default function MembersClient({
+  initialMembers,
+  defaultOpen = false,
+}: MembersClientProps) {
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>(initialMembers);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(defaultOpen);
+  const formRef = useRef<HTMLDivElement>(null);
 
-  // Build lookup maps for parent names
+  // Scroll the form into view whenever it opens
+  useEffect(() => {
+    if (showForm && formRef.current) {
+      formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [showForm]);
+
+  // Build lookup map for parent names
   const memberMap = new Map(members.map((m) => [m.id, m]));
 
   async function handleDelete(id: string) {
@@ -53,16 +66,18 @@ export default function MembersClient({ initialMembers }: MembersClientProps) {
       {/* Toggle add form */}
       <div>
         <button
+          type="button"
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700"
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 active:scale-95"
         >
-          {showForm ? "Cancel" : "+ Add Member"}
+          {showForm ? "✕ Cancel" : "+ Add Member"}
         </button>
       </div>
 
-      {showForm && (
+      {/* Add member form — always in DOM, toggled via CSS to avoid hydration issues */}
+      <div ref={formRef} className={showForm ? undefined : "hidden"}>
         <MemberForm allMembers={members} onSuccess={handleAddSuccess} />
-      )}
+      </div>
 
       {/* Member cards */}
       {members.length === 0 ? (
