@@ -22,7 +22,9 @@ import {
   X,
   Filter,
   Users,
-  Loader2
+  Loader2,
+  AlignLeft,
+  LayoutGrid,
 } from "lucide-react";
 import TreeNodeSvg from "./TreeNodeSvg";
 
@@ -51,7 +53,6 @@ function getImageSize(dataUrl: string): Promise<{ width: number; height: number 
 
 export default function TreeView({ members, relationships }: TreeViewProps) {
   const [search, setSearch] = useState("");
-  const [mainRootId, setMainRootId] = useState("all");
   const[fullscreen, setFullscreen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -65,15 +66,31 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
     [members]
   );
 
+  // Default root: stored preference → member named "Wiryo" → "all"
+  const defaultRootId = useMemo(() => {
+    const wiryo = rootOptions.find(
+      (r) => r.name.trim().toLowerCase() === "wiryo"
+    );
+    return wiryo?.id ?? "all";
+  }, [rootOptions]);
+
+  const [mainRootId, setMainRootId] = useState("all");
+  const [orientation, setOrientation] = useState<"vertical" | "horizontal">("vertical");
+
   useEffect(() => {
     if (restoredRef.current) return;
     restoredRef.current = true;
     const stored = localStorage.getItem("wiryo-main-root");
-    if (!stored) return;
-    if (stored === "all" || rootOptions.some((r) => r.id === stored)) {
+    if (stored && (stored === "all" || rootOptions.some((r) => r.id === stored))) {
       setMainRootId(stored);
+    } else {
+      setMainRootId(defaultRootId);
     }
-  }, [rootOptions]);
+    const storedOrientation = localStorage.getItem("wiryo-orientation");
+    if (storedOrientation === "horizontal" || storedOrientation === "vertical") {
+      setOrientation(storedOrientation);
+    }
+  }, [rootOptions, defaultRootId]);
 
   useEffect(() => {
     document.body.style.overflow = fullscreen ? "hidden" : "";
@@ -247,6 +264,24 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
           <span>Export</span>
         </button>
 
+        {/* Orientation Toggle */}
+        <button
+          type="button"
+          onClick={() => {
+            const next = orientation === "vertical" ? "horizontal" : "vertical";
+            setOrientation(next);
+            localStorage.setItem("wiryo-orientation", next);
+          }}
+          title={orientation === "vertical" ? "Switch to horizontal layout" : "Switch to vertical layout"}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 shadow-sm transition hover:bg-zinc-50 hover:text-emerald-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-emerald-400"
+        >
+          {orientation === "vertical" ? (
+            <AlignLeft className="h-4 w-4" />
+          ) : (
+            <LayoutGrid className="h-4 w-4" />
+          )}
+        </button>
+
         {/* Fullscreen Toggle */}
         <button
           type="button"
@@ -290,6 +325,7 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
               key={root.member.id}
               node={root}
               highlightId={highlightId}
+              orientation={orientation}
             />
           ))}
         </div>
