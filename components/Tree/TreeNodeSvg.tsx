@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import type { TreeNode as TNode, TreePartnerGroup } from "@/lib/tree";
 
 // ─── Shared constants ──────────────────────────────────────────────────────────
@@ -13,6 +13,7 @@ const TOGGLE_R = 9;
 const V_STUB   = 14;
 const LINE_CLR = "var(--tree-line, #71717a)";
 const PADDING  = 32;
+const ANIM_MS  = 280; // must match motion transition duration
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
 
@@ -242,7 +243,10 @@ function vComputeHeight(layout: VLayoutNode, collapsed: Set<string>): number {
 
 interface VRenderCtx {
   highlightId?: string;
-  collapsed: Set<string>;
+  /** drives geometry — lags on collapse */
+  layoutCollapsed: Set<string>;
+  /** drives opacity — immediate */
+  visibleCollapsed: Set<string>;
   onToggle: (key: string) => void;
 }
 
@@ -280,45 +284,53 @@ function vRenderNode(layout: VLayoutNode, ox: number, oy: number, ctx: VRenderCt
         <MemberCardSvg key={`card-${g.partner.id}`} member={g.partner}
           isHighlighted={g.partner.id === ctx.highlightId} x={pX} y={oy} />
       );
+    }
 
-      if (lg.group.children.length > 0) {
-        const ax = ox + lg.coupleAnchorX, isC = ctx.collapsed.has(nodeKey);
-        const ty = oy + CARD_H + V_STUB + TOGGLE_R;
-        els.push(
-          <line key={`v-${nodeKey}`} x1={ax} y1={midY} x2={ax} y2={isC ? ty : ty + TOGGLE_R + V_STUB} stroke={LINE_CLR} strokeWidth={2} />,
-          <ToggleSvg key={`tgl-${nodeKey}`} x={ax} y={ty} collapsed={isC} onClick={() => ctx.onToggle(nodeKey)} />
-        );
-        if (!isC) {
-          const cy2 = oy + CARD_H + V_STUB + TOGGLE_R * 2 + V_STUB;
-          const fc = lg.childrenLayout[0], lc = lg.childrenLayout[lg.childrenLayout.length - 1];
-          if (lg.childrenLayout.length > 1)
-            els.push(<line key={`hb-${nodeKey}`} x1={ox + fc.x + fc.anchorX} y1={cy2} x2={ox + lc.x + lc.anchorX} y2={cy2} stroke={LINE_CLR} strokeWidth={2} />);
-          for (const cl of lg.childrenLayout) {
-            const ca = ox + cl.x + cl.anchorX;
-            els.push(<line key={`vs-${nodeKey}-${cl.node.member.id}`} x1={ca} y1={cy2} x2={ca} y2={cy2 + V_STUB} stroke={LINE_CLR} strokeWidth={2} />);
-            els.push(...vRenderNode(cl, ox + cl.x, cy2 + V_STUB, ctx));
-          }
+    if (lg.group.children.length > 0) {
+      const isLayoutC  = ctx.layoutCollapsed.has(nodeKey);
+      const isVisibleC = ctx.visibleCollapsed.has(nodeKey);
+      const midY = oy + CARD_H / 2;
+      const ax   = ox + lg.coupleAnchorX;
+      const ty   = oy + CARD_H + V_STUB + TOGGLE_R;
+
+      els.push(
+        <line key={`v-${nodeKey}`} x1={ax} y1={midY} x2={ax}
+          y2={isLayoutC ? ty : ty + TOGGLE_R + V_STUB}
+          stroke={LINE_CLR} strokeWidth={2} />,
+        <ToggleSvg key={`tgl-${nodeKey}`} x={ax} y={ty}
+          collapsed={isVisibleC} onClick={() => ctx.onToggle(nodeKey)} />
+      );
+
+      if (!isLayoutC) {
+        const cy2 = oy + CARD_H + V_STUB + TOGGLE_R * 2 + V_STUB;
+        const fc  = lg.childrenLayout[0];
+        const lc  = lg.childrenLayout[lg.childrenLayout.length - 1];
+        const childEls: React.ReactNode[] = [];
+        if (lg.childrenLayout.length > 1)
+          childEls.push(
+            <line key={`hb-${nodeKey}`}
+              x1={ox + fc.x + fc.anchorX} y1={cy2}
+              x2={ox + lc.x + lc.anchorX} y2={cy2}
+              stroke={LINE_CLR} strokeWidth={2} />
+          );
+        for (const cl of lg.childrenLayout) {
+          const ca = ox + cl.x + cl.anchorX;
+          childEls.push(
+            <line key={`vs-${nodeKey}-${cl.node.member.id}`}
+              x1={ca} y1={cy2} x2={ca} y2={cy2 + V_STUB}
+              stroke={LINE_CLR} strokeWidth={2} />
+          );
+          childEls.push(...vRenderNode(cl, ox + cl.x, cy2 + V_STUB, ctx));
         }
-      }
-    } else {
-      if (lg.group.children.length > 0) {
-        const ax = ox + lg.coupleAnchorX, isC = ctx.collapsed.has(nodeKey), midY = oy + CARD_H / 2;
-        const ty = oy + CARD_H + V_STUB + TOGGLE_R;
         els.push(
-          <line key={`v-${nodeKey}`} x1={ax} y1={midY} x2={ax} y2={isC ? ty : ty + TOGGLE_R + V_STUB} stroke={LINE_CLR} strokeWidth={2} />,
-          <ToggleSvg key={`tgl-${nodeKey}`} x={ax} y={ty} collapsed={isC} onClick={() => ctx.onToggle(nodeKey)} />
+          <motion.g
+            key={`cg-${nodeKey}`}
+            animate={{ opacity: isVisibleC ? 0 : 1 }}
+            transition={{ duration: ANIM_MS / 1000, ease: [0.4, 0, 0.2, 1] }}
+          >
+            {childEls}
+          </motion.g>
         );
-        if (!isC) {
-          const cy2 = oy + CARD_H + V_STUB + TOGGLE_R * 2 + V_STUB;
-          const fc = lg.childrenLayout[0], lc = lg.childrenLayout[lg.childrenLayout.length - 1];
-          if (lg.childrenLayout.length > 1)
-            els.push(<line key={`hb-${nodeKey}`} x1={ox + fc.x + fc.anchorX} y1={cy2} x2={ox + lc.x + lc.anchorX} y2={cy2} stroke={LINE_CLR} strokeWidth={2} />);
-          for (const cl of lg.childrenLayout) {
-            const ca = ox + cl.x + cl.anchorX;
-            els.push(<line key={`vs-${nodeKey}-${cl.node.member.id}`} x1={ca} y1={cy2} x2={ca} y2={cy2 + V_STUB} stroke={LINE_CLR} strokeWidth={2} />);
-            els.push(...vRenderNode(cl, ox + cl.x, cy2 + V_STUB, ctx));
-          }
-        }
       }
     }
   }
@@ -423,7 +435,8 @@ function hComputeWidth(layout: HLayoutNode, collapsed: Set<string>): number {
 
 interface HRenderCtx {
   highlightId?: string;
-  collapsed: Set<string>;
+  layoutCollapsed: Set<string>;
+  visibleCollapsed: Set<string>;
   onToggle: (key: string) => void;
 }
 
@@ -470,40 +483,45 @@ function hRenderNode(layout: HLayoutNode, ox: number, oy: number, ctx: HRenderCt
 
     // Children branch to the right
     if (lg.group.children.length > 0) {
-      const isC = ctx.collapsed.has(nodeKey);
-      const toggleX = ox + CARD_W + V_STUB + TOGGLE_R;
-      const lineEndX = isC ? toggleX : toggleX + TOGGLE_R + V_STUB;
-      // For couples: the connector is at CARD_W/2 (centre of both cards),
-      // so the branch must start there to visually connect to it.
-      // For single-parent: anchor is at card centre-right, start from card edge.
+      const isLayoutC  = ctx.layoutCollapsed.has(nodeKey);
+      const isVisibleC = ctx.visibleCollapsed.has(nodeKey);
+      const toggleX    = ox + CARD_W + V_STUB + TOGGLE_R;
+      const lineEndX   = isLayoutC ? toggleX : toggleX + TOGGLE_R + V_STUB;
       const branchStartX = g.partner ? ox + CARD_W / 2 : ox + CARD_W;
 
       els.push(
-        <line key={`h-${nodeKey}`} x1={branchStartX} y1={coupleAnchorAbsY} x2={lineEndX} y2={coupleAnchorAbsY} stroke={LINE_CLR} strokeWidth={2} />,
-        <ToggleSvg key={`tgl-${nodeKey}`} x={toggleX} y={coupleAnchorAbsY} collapsed={isC} onClick={() => ctx.onToggle(nodeKey)} />
+        <line key={`h-${nodeKey}`} x1={branchStartX} y1={coupleAnchorAbsY}
+          x2={lineEndX} y2={coupleAnchorAbsY} stroke={LINE_CLR} strokeWidth={2} />,
+        <ToggleSvg key={`tgl-${nodeKey}`} x={toggleX} y={coupleAnchorAbsY}
+          collapsed={isVisibleC} onClick={() => ctx.onToggle(nodeKey)} />
       );
 
-      if (!isC && lg.childrenLayout.length > 0) {
+      if (!isLayoutC && lg.childrenLayout.length > 0) {
         const childrenX = ox + CARD_W + V_STUB + TOGGLE_R * 2 + V_STUB;
         const fc = lg.childrenLayout[0], lc = lg.childrenLayout[lg.childrenLayout.length - 1];
-        const vTop    = oy + fc.y + fc.anchorY;
-        const vBottom = oy + lc.y + lc.anchorY;
+        const vTop      = oy + fc.y + fc.anchorY;
+        const vBottom   = oy + lc.y + lc.anchorY;
         const barTop    = Math.min(coupleAnchorAbsY, vTop);
         const barBottom = Math.max(coupleAnchorAbsY, vBottom);
         const hChildEls: React.ReactNode[] = [];
-        hChildEls.push(<line key={`vb-${nodeKey}`} x1={childrenX} y1={barTop} x2={childrenX} y2={barBottom} stroke={LINE_CLR} strokeWidth={2} />);
+        hChildEls.push(
+          <line key={`vb-${nodeKey}`} x1={childrenX} y1={barTop}
+            x2={childrenX} y2={barBottom} stroke={LINE_CLR} strokeWidth={2} />
+        );
         for (const cl of lg.childrenLayout) {
           const clAbsY = oy + cl.y + cl.anchorY;
-          hChildEls.push(<line key={`hs-${nodeKey}-${cl.node.member.id}`} x1={childrenX} y1={clAbsY} x2={childrenX + V_STUB} y2={clAbsY} stroke={LINE_CLR} strokeWidth={2} />);
+          hChildEls.push(
+            <line key={`hs-${nodeKey}-${cl.node.member.id}`}
+              x1={childrenX} y1={clAbsY} x2={childrenX + V_STUB} y2={clAbsY}
+              stroke={LINE_CLR} strokeWidth={2} />
+          );
           hChildEls.push(...hRenderNode(cl, childrenX + V_STUB, oy + cl.y, ctx));
         }
         els.push(
           <motion.g
             key={`hcg-${nodeKey}`}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+            animate={{ opacity: isVisibleC ? 0 : 1 }}
+            transition={{ duration: ANIM_MS / 1000, ease: [0.4, 0, 0.2, 1] }}
           >
             {hChildEls}
           </motion.g>
@@ -518,6 +536,14 @@ function hRenderNode(layout: HLayoutNode, ox: number, oy: number, ctx: HRenderCt
 // Main exported component
 // ════════════════════════════════════════════════════════════════════════════════
 
+// ════════════════════════════════════════════════════════════════════════════════
+// Two-phase animation:
+//   COLLAPSE: visibleCollapsed ← key  (children fade out immediately)
+//             layoutCollapsed  ← key  after ANIM_MS ms (space shrinks)
+//   EXPAND:   layoutCollapsed  → key  (space opens immediately)
+//             visibleCollapsed → key  after one rAF tick (children fade in at correct coords)
+// ════════════════════════════════════════════════════════════════════════════════
+
 export default function TreeNodeSvg({
   node, highlightId, orientation = "vertical",
 }: {
@@ -525,53 +551,74 @@ export default function TreeNodeSvg({
   highlightId?: string;
   orientation?: "vertical" | "horizontal";
 }) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // layoutCollapsed drives SVG geometry (coordinates, canvas size)
+  const [layoutCollapsed, setLayoutCollapsed] = useState<Set<string>>(new Set());
+  // visibleCollapsed drives opacity — may lag behind layoutCollapsed
+  const [visibleCollapsed, setVisibleCollapsed] = useState<Set<string>>(new Set());
 
+  // Stable callback ref — avoids stale closure without touching .current in render
   const onToggle = useCallback((key: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
+    // Read latest visibleCollapsed via functional update (no stale closure)
+    setVisibleCollapsed((vc) => {
+      const isCurrentlyCollapsed = vc.has(key);
+
+      if (isCurrentlyCollapsed) {
+        // ── EXPAND ──
+        // 1. Open layout space immediately so children get their final coordinates
+        setLayoutCollapsed((lc) => { const s = new Set(lc); s.delete(key); return s; });
+        // 2. After one frame, fade children in at their correct positions
+        setTimeout(() => {
+          setVisibleCollapsed((v) => { const s = new Set(v); s.delete(key); return s; });
+        }, 20);
+        // Keep visibleCollapsed unchanged this render (children still hidden)
+        return vc;
+      } else {
+        // ── COLLAPSE ──
+        // 1. Hide children visually first → fade-out begins
+        const next = new Set(vc);
+        next.add(key);
+        // 2. After fade-out completes, shrink layout space
+        setTimeout(() => {
+          setLayoutCollapsed((lc) => { const s = new Set(lc); s.add(key); return s; });
+        }, ANIM_MS + 20);
+        return next;
+      }
     });
   }, []);
 
-  const vLayout = useMemo(() => vLayoutNode(node, collapsed), [node, collapsed]);
-  const hLayout = useMemo(() => hLayoutNode(node, collapsed), [node, collapsed]);
+  const vLayout = useMemo(() => vLayoutNode(node, layoutCollapsed), [node, layoutCollapsed]);
+  const hLayout = useMemo(() => hLayoutNode(node, layoutCollapsed), [node, layoutCollapsed]);
 
   if (orientation === "horizontal") {
-    const svgW = hComputeWidth(hLayout, collapsed) + PADDING * 2;
+    const svgW = hComputeWidth(hLayout, layoutCollapsed) + PADDING * 2;
     const svgH = hLayout.height + PADDING * 2;
-    const ctx: HRenderCtx = { highlightId, collapsed, onToggle };
+    const ctx: HRenderCtx = { highlightId, layoutCollapsed, visibleCollapsed, onToggle };
     return (
       <motion.svg
         width={svgW} height={svgH}
         viewBox={`0 0 ${svgW} ${svgH}`}
         animate={{ width: svgW, height: svgH }}
-        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+        transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
         style={{ overflow: "visible", display: "block" }}
       >
-        <AnimatePresence>
-          {hRenderNode(hLayout, PADDING, PADDING, ctx)}
-        </AnimatePresence>
+        {hRenderNode(hLayout, PADDING, PADDING, ctx)}
       </motion.svg>
     );
   }
 
   // vertical (default)
   const svgW = vLayout.width + PADDING * 2;
-  const svgH = vComputeHeight(vLayout, collapsed) + PADDING * 2;
-  const ctx: VRenderCtx = { highlightId, collapsed, onToggle };
+  const svgH = vComputeHeight(vLayout, layoutCollapsed) + PADDING * 2;
+  const ctx: VRenderCtx = { highlightId, layoutCollapsed, visibleCollapsed, onToggle };
   return (
     <motion.svg
       width={svgW} height={svgH}
       viewBox={`0 0 ${svgW} ${svgH}`}
       animate={{ width: svgW, height: svgH }}
-      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+      transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
       style={{ overflow: "visible", display: "block" }}
     >
-      <AnimatePresence>
-        {vRenderNode(vLayout, PADDING, PADDING, ctx)}
-      </AnimatePresence>
+      {vRenderNode(vLayout, PADDING, PADDING, ctx)}
     </motion.svg>
   );
 }
