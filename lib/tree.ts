@@ -107,6 +107,22 @@ export function getTreeRoots(
   return roots.sort(sortMembers);
 }
 
+/**
+ * Returns every member who has no parent in the member list.
+ * Used for the root picker dropdown — shows all selectable starting points,
+ * including partners who share a connected component.
+ */
+export function getAllRootCandidates(members: Member[]): Member[] {
+  const memberMap = new Map(members.map((m) => [m.id, m]));
+  return members
+    .filter(
+      (m) =>
+        (!m.fatherId || !memberMap.has(m.fatherId)) &&
+        (!m.motherId || !memberMap.has(m.motherId))
+    )
+    .sort(sortMembers);
+}
+
 export function buildTree(
   members: Member[],
   relationships: PartnerRelationship[],
@@ -114,9 +130,16 @@ export function buildTree(
 ): TreeNode[] {
   const memberMap = new Map(members.map((member) => [member.id, member]));
   const roots = getTreeRoots(members, relationships);
-  const selectedRoots = options.mainRootId
-    ? roots.filter((root) => root.id === options.mainRootId)
-    : roots;
+  let selectedRoots: Member[];
+  if (options.mainRootId) {
+    // Search all root candidates so any partner-root is selectable,
+    // not just the one component representative returned by getTreeRoots.
+    const allCandidates = getAllRootCandidates(members);
+    const found = allCandidates.find((r) => r.id === options.mainRootId);
+    selectedRoots = found ? [found] : roots.filter((r) => r.id === options.mainRootId);
+  } else {
+    selectedRoots = roots;
+  }
 
   function buildNode(member: Member, depth: number, visited: Set<string>): TreeNode {
     if (visited.has(member.id)) {

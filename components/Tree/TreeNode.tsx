@@ -121,31 +121,28 @@ const CHILD_ANCHOR_REM = CHILD_PAD + CARD_W / 2; // 4.75rem
 
 // ─── Sub-komponen: distribusi anak di bawah 1 group ────────────────────────
 
+/**
+ * Merender garis vertikal + toggle + H-bar + kartu anak untuk SATU group.
+ * Di-render sebagai kolom yang dimulai dari x=0 (kiri wrapper-nya sendiri).
+ * Parent bertanggung jawab menempatkan wrapper ini di posisi horizontal yang benar.
+ */
 function ChildrenSection({
   group,
   highlightId,
   collapsed,
   onToggle,
-  anchorFromLeft, // rem: posisi garis vertikal dari kiri seluruh baris pasangan
 }: {
   group: TreePartnerGroup;
   highlightId?: string;
   collapsed: boolean;
   onToggle?: () => void;
-  anchorFromLeft: number; // rem
 }) {
   if (group.children.length === 0) return null;
   const childAnchor = `${CHILD_ANCHOR_REM}rem`;
 
   return (
-    // Posisikan container ini tepat di bawah anchor group-nya
-    <div
-      className="flex flex-col"
-      style={{ paddingLeft: `${anchorFromLeft}rem` }}
-    >
-      {/* Garis dari baris pasangan ke toggle */}
-      <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-600" />
-
+    <div className="flex flex-col">
+      {/* Tidak ada h-4 di sini — T-junction row di parent sudah handle garis dari connector */}
       {onToggle ? (
         <ToggleButton collapsed={collapsed} onToggle={onToggle} />
       ) : (
@@ -157,14 +154,10 @@ function ChildrenSection({
           {/* Garis dari toggle ke H-bar */}
           <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-600" />
 
-          {/*
-           * Geser container anak ke kiri agar CHILD_ANCHOR anak pertama
-           * tepat sejajar dengan garis vertikal group ini.
-           * marginLeft = -(anchorFromLeft - CHILD_ANCHOR_REM)
-           */}
+          {/* Distribusi anak — geser kiri agar CHILD_ANCHOR anak[0] di x=0 */}
           <div
             className="flex items-start gap-0"
-            style={{ marginLeft: `${-(anchorFromLeft - CHILD_ANCHOR_REM)}rem` }}
+            style={{ marginLeft: `${-CHILD_ANCHOR_REM}rem` }}
           >
             {group.children.map((child, idx) => {
               const isFirst = idx === 0;
@@ -176,7 +169,6 @@ function ChildrenSection({
                   key={`${group.relationshipId ?? group.partner?.id ?? "single"}-${child.member.id}`}
                   className="relative flex flex-col items-start"
                 >
-                  {/* H-bar + garis vertikal turun */}
                   <div className="relative h-4 w-full">
                     {!isOnly && !isFirst && (
                       <div
@@ -195,7 +187,6 @@ function ChildrenSection({
                       />
                     )}
                   </div>
-
                   <div className="px-1 sm:px-2">
                     <TreeNode node={child} highlightId={highlightId} />
                   </div>
@@ -319,37 +310,77 @@ export default function TreeNode({ node, highlightId }: TreeNodeProps) {
         )}
       </div>
 
-      {/* ── ChildrenSection per group ── */}
-      <div className="relative flex flex-col">
-        {leftGroups.map((g, i) => (
-          <ChildrenSection
-            key={`lc-${g.relationshipId ?? g.partner?.id ?? i}`}
-            group={g}
-            highlightId={highlightId}
-            collapsed={collapsed}
-            anchorFromLeft={leftAnchors[i]}
-            onToggle={
-              visibleGroups.indexOf(g) === firstWithChildrenIdx
-                ? () => setCollapsed((v) => !v)
-                : undefined
-            }
-          />
-        ))}
-        {rightGroups.map((g, j) => (
-          <ChildrenSection
-            key={`rc-${g.relationshipId ?? g.partner?.id ?? j}`}
-            group={g}
-            highlightId={highlightId}
-            collapsed={collapsed}
-            anchorFromLeft={isSingle && !g.partner ? singleAnchor : rightAnchors[j]}
-            onToggle={
-              visibleGroups.indexOf(g) === firstWithChildrenIdx
-                ? () => setCollapsed((v) => !v)
-                : undefined
-            }
-          />
-        ))}
-      </div>
+      {/*
+       * ── T-junction row ──
+       * Baris tipis (h-4) yang berisi garis vertikal pendek di posisi anchor
+       * tiap group yang punya anak. Ini membentuk huruf T:
+       * garis pernikahan horizontal (di baris pasangan) + batang vertikal (di sini).
+       * Dilanjutkan oleh ChildrenSection di bawahnya.
+       */}
+      {(() => {
+        const sectionsWithAnchor = [
+          ...leftGroups
+            .map((g, i) => ({ group: g, anchor: leftAnchors[i] }))
+            .filter((s) => s.group.children.length > 0),
+          ...rightGroups
+            .map((g, j) => ({
+              group: g,
+              anchor: isSingle && !g.partner ? singleAnchor : rightAnchors[j],
+            }))
+            .filter((s) => s.group.children.length > 0),
+        ];
+
+        if (sectionsWithAnchor.length === 0) return null;
+
+        // Lebar total baris pasangan (rem) — untuk sizing container relative
+        const totalRowWidth =
+          leftGroups.length * (CARD_W + CONN_W) +
+          CARD_W +
+          rightGroups.filter((g) => g.partner).length * (CONN_W + CARD_W);
+
+        return (
+          <>
+            {/* T-junction: garis vertikal dari midpoint connector tiap group */}
+            <div
+              className="relative h-4 shrink-0"
+              style={{ width: `${totalRowWidth}rem` }}
+            >
+              {sectionsWithAnchor.map(({ group, anchor }, si) => (
+                <div
+                  key={`tj-${group.relationshipId ?? group.partner?.id ?? si}`}
+                  className="absolute top-0 h-full w-px bg-zinc-300 dark:bg-zinc-600"
+                  style={{ left: `${anchor}rem`, transform: "translateX(-50%)" }}
+                />
+              ))}
+            </div>
+
+            {/* ChildrenSection — garis vertikal di sini menyambung dari T-junction */}
+            <div className="flex flex-row items-start">
+              {sectionsWithAnchor.map(({ group, anchor }, si) => {
+                const prevAnchor = si === 0 ? 0 : sectionsWithAnchor[si - 1].anchor;
+                const gIdx = visibleGroups.indexOf(group);
+                return (
+                  <div
+                    key={`cs-${group.relationshipId ?? group.partner?.id ?? si}`}
+                    style={{ paddingLeft: `${anchor - prevAnchor}rem` }}
+                  >
+                    <ChildrenSection
+                      group={group}
+                      highlightId={highlightId}
+                      collapsed={collapsed}
+                      onToggle={
+                        gIdx === firstWithChildrenIdx
+                          ? () => setCollapsed((v) => !v)
+                          : undefined
+                      }
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        );
+      })()}
 
     </div>
   );

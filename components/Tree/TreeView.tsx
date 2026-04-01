@@ -9,10 +9,9 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
-import { buildTree, getTreeRoots } from "@/lib/tree";
+import { buildTree, getAllRootCandidates } from "@/lib/tree";
 import type { Member } from "@/lib/members";
 import type { PartnerRelationship } from "@/lib/relationships";
-import TreeNode from "./TreeNode";
 import {
   Search,
   Maximize,
@@ -25,6 +24,7 @@ import {
   Users,
   Loader2
 } from "lucide-react";
+import TreeNodeSvg from "./TreeNodeSvg";
 
 interface TreeViewProps {
   members: Member[];
@@ -61,8 +61,8 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
   const restoredRef = useRef(false);
 
   const rootOptions = useMemo(
-    () => getTreeRoots(members, relationships),
-    [members, relationships]
+    () => getAllRootCandidates(members),
+    [members]
   );
 
   useEffect(() => {
@@ -103,68 +103,16 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
     const width = Math.max(node.scrollWidth, node.clientWidth);
     const height = Math.max(node.scrollHeight, node.clientHeight);
 
-    // Remove dark class so light-mode base applies, then wait for repaint
-    const html = document.documentElement;
-    const wasDark = html.classList.contains("dark");
-    if (wasDark) html.classList.remove("dark");
-    await new Promise<void>((r) =>
-      requestAnimationFrame(() => requestAnimationFrame(() => r()))
-    );
-
-    // Directly override inline styles for vibrant white-paper appearance.
-    interface Saved {
-      text: string;
-    }
-    const saved = new Map<HTMLElement, Saved>();
-
-    const applyOverride = (el: HTMLElement) => {
-      const cls = el.classList;
-      const save: Saved = { text: el.style.cssText };
-      let css = "";
-
-      // Preserve TreeNode color classes for export
-      if (cls.contains("bg-blue-50")) { css += "background-color: #3b82f6 !important; "; }
-      else if (cls.contains("bg-rose-50")) { css += "background-color: #f43f5e !important; "; }
-      else if (cls.contains("bg-emerald-50")) { css += "background-color: #10b981 !important; "; }
-      else if (cls.contains("bg-white")) { css += "background-color: #e4e4e7 !important; "; }
-
-      if (cls.contains("bg-zinc-300")) { css += "background-color: #3f3f46 !important; "; }
-      if (cls.contains("border-blue-200")) { css += "border-color: #1d4ed8 !important; "; }
-      if (cls.contains("border-rose-200")) { css += "border-color: #be123c !important; "; }
-      if (cls.contains("border-zinc-200")) { css += "border-color: #71717a !important; "; }
-      if (cls.contains("border-zinc-300")) { css += "border-color: #52525b !important; "; }
-
-      if (cls.contains("text-blue-900")) { css += "color: #ffffff !important; "; }
-      if (cls.contains("text-rose-900")) { css += "color: #ffffff !important; "; }
-      if (cls.contains("text-emerald-900")) { css += "color: #ffffff !important; "; }
-      if (cls.contains("text-zinc-900")) { css += "color: #09090b !important; "; }
-      if (cls.contains("text-zinc-400")) { css += "color: #3f3f46 !important; "; }
-      if (cls.contains("text-zinc-500")) { css += "color: #27272a !important; "; }
-
-      if (css) {
-        el.style.cssText = css;
-        saved.set(el, save);
-      }
-    };
-
-    applyOverride(node);
-    node.querySelectorAll<HTMLElement>("*").forEach(applyOverride);
-
-    try {
-      return await toPng(node, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-        width,
-        height,
-        style: { width: `${width}px`, height: `${height}px` },
-      });
-    } finally {
-      saved.forEach((save, el) => {
-        el.style.cssText = save.text;
-      });
-      if (wasDark) html.classList.add("dark");
-    }
+    // TreeNodeSvg already uses hardcoded light-mode inline styles — no class
+    // overrides needed. Just capture the SVG tree directly.
+    return await toPng(node, {
+      cacheBust: true,
+      pixelRatio: 2,
+      backgroundColor: "#ffffff",
+      width,
+      height,
+      style: { width: `${width}px`, height: `${height}px` },
+    });
   }
 
   async function handleOpenPreview() {
@@ -253,7 +201,7 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
               setMainRootId(e.target.value);
               localStorage.setItem("wiryo-main-root", e.target.value);
             }}
-            className="h-10 w-full appearance-none rounded-xl border border-zinc-200 bg-zinc-50 pl-9 pr-10 text-sm font-medium text-zinc-700 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 md:min-w-[200px]"
+            className="h-10 w-full appearance-none rounded-xl border border-zinc-200 bg-zinc-50 pl-9 pr-10 text-sm font-medium text-zinc-700 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 md:min-w-50"
           >
             <option value="all">View All Trees</option>
             {rootOptions.map((root) => (
@@ -338,7 +286,7 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
           className="flex min-w-max flex-col items-center gap-16 pb-4"
         >
           {forest.map((root) => (
-            <TreeNode
+            <TreeNodeSvg
               key={root.member.id}
               node={root}
               highlightId={highlightId}
@@ -361,7 +309,7 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
 
       {/* Export Preview Modal */}
       {previewOpen && previewImage && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800">

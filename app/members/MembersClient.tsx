@@ -68,10 +68,10 @@ export default function MembersClient({
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
-          className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-all active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+          className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-offset-2 ${
             showForm
               ? "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-              : "bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow focus-visible:outline-emerald-600 dark:bg-emerald-500 dark:hover:bg-emerald-600"
+              : "bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow focus-visible:ring-emerald-600 dark:bg-emerald-500 dark:hover:bg-emerald-600"
           }`}
         >
           {showForm ? (

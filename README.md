@@ -1,36 +1,116 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Wiryo 🌳
 
-## Getting Started
+Wiryo adalah aplikasi **family tree multi-generasi** berbasis Next.js App Router.
+Data anggota disimpan dalam database libSQL (Turso / SQLite file), lalu divisualisasikan dalam bentuk pohon keluarga interaktif.
 
-First, run the development server:
+## Fitur Utama
+
+- Manajemen anggota keluarga (CRUD)
+- Dukungan ayah & ibu secara independen untuk tiap anggota
+- Dukungan relasi pasangan (aktif / mantan)
+- Deteksi pencegahan siklus relasi (agar struktur keluarga tetap valid)
+- Visual tree interaktif dengan:
+  - highlight pencarian nama
+  - filter berdasarkan root utama
+  - mode fullscreen
+  - export ke PNG dan PDF
+- Detail anggota: orang tua, anak, dan relasi pasangan
+- PWA dasar (manifest + service worker untuk offline shell)
+
+## Stack Teknologi
+
+- Next.js 16 (App Router)
+- React 19
+- TypeScript
+- Tailwind CSS 4
+- Turso/libSQL (`@libsql/client`)
+- `html-to-image` + `jspdf` untuk export tree
+
+## Struktur Proyek (ringkas)
+
+- `app/` — routing App Router, halaman, API route
+- `components/Member/` — form dan kartu anggota
+- `components/Tree/` — renderer visual pohon keluarga
+- `lib/` — akses DB, operasi member/relationship, util tree
+- `public/sw.js` — service worker PWA
+
+## Menjalankan Project
+
+1. Install dependency:
+
+```bash
+npm install
+```
+
+1. Buat file `.env.local` di root project:
+
+```env
+# Opsi 1: Turso (remote)
+TURSO_DATABASE_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=your-token
+
+# Opsi 2: SQLite lokal (tanpa Turso)
+# TURSO_DATABASE_URL=file:./dev.db
+# TURSO_AUTH_TOKEN=
+```
+
+1. Jalankan development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+1. Buka:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+[http://localhost:3000](http://localhost:3000)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+> Tabel database diinisialisasi otomatis saat akses data pertama.
 
-## Learn More
+## Script
 
-To learn more about Next.js, take a look at the following resources:
+- `npm run dev` — jalankan mode development
+- `npm run build` — build production
+- `npm run start` — jalankan hasil build
+- `npm run lint` — linting dengan ESLint
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## API Ringkas
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Members
 
-## Deploy on Vercel
+- `GET /api/members` — list semua anggota
+- `POST /api/members` — tambah anggota
+- `GET /api/members/:id` — detail anggota
+- `PUT /api/members/:id` — update anggota
+- `DELETE /api/members/:id` — hapus anggota
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Payload member utama:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `name` (string, wajib)
+- `fatherId` (string | null)
+- `motherId` (string | null)
+- `birthDate` (string | null, biasanya tahun lahir)
+- `gender` (`"L" | "P" | null`)
+
+### Relationships
+
+- `GET /api/relationships` — list relasi pasangan
+- `POST /api/relationships` — tambah/update relasi pasangan
+- `PUT /api/relationships/:id` — upsert relasi berdasarkan pasangan
+- `DELETE /api/relationships/:id` — hapus relasi
+
+Payload relationship:
+
+- `memberAId` (string, wajib)
+- `memberBId` (string, wajib)
+- `status` (`"current" | "former"`)
+
+## Catatan
+
+- Ikon PWA perlu disediakan di `public/icons/`:
+  - `icon-192x192.png`
+  - `icon-512x512.png`
+- Service worker didaftarkan hanya pada mode production.
+
+---
+
+Jika butuh, saya bisa lanjut bantu bikinkan section tambahan seperti contoh request/response API atau panduan deployment (Vercel/Fly.io).
