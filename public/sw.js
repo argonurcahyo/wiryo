@@ -9,42 +9,49 @@
  * Cache versioning: bump CACHE_VERSION whenever you deploy a new shell.
  */
 
-const CACHE_VERSION = "v1";
-const SHELL_CACHE = `wiryo-shell-${CACHE_VERSION}`;
-const API_CACHE   = `wiryo-api-${CACHE_VERSION}`;
+const CACHE_VERSION  = "v2";
+const SHELL_CACHE    = `wiryo-shell-${CACHE_VERSION}`;
+const STATIC_CACHE   = `wiryo-static-${CACHE_VERSION}`;
+const API_CACHE      = `wiryo-api-${CACHE_VERSION}`;
 
-/** Static assets that form the app shell */
-const SHELL_ASSETS = [
-  "/",
-  "/members",
-  // Next.js injects hashed filenames; the shell assets below are added
-  // dynamically during `install` via self.__WB_MANIFEST in a Workbox setup.
-  // For this zero-dependency SW we pre-cache only the known routes.
-];
+// Only pre-cache the offline fallback page — live pages are fetched fresh
+const PRECACHE_ASSETS = [];
 
 // ── Install ────────────────────────────────────────────────────────────────
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS))
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(PRECACHE_ASSETS))
   );
-  // Activate immediately without waiting for existing tabs to close
+  // Activate immediately — the new SW takes over without waiting
   self.skipWaiting();
+});
+
+// Allow clients to trigger skipWaiting on demand (for update banners)
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 // ── Activate ───────────────────────────────────────────────────────────────
 
 self.addEventListener("activate", (event) => {
+  const KEEP = new Set([SHELL_CACHE, STATIC_CACHE, API_CACHE]);
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((k) => k !== SHELL_CACHE && k !== API_CACHE)
-          .map((k) => caches.delete(k))
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => !KEEP.has(k)).map((k) => caches.delete(k)))
       )
-    )
+      .then(() =>
+        // Notify all open tabs so they can show an "update ready" banner
+        self.clients
+          .matchAll({ type: "window", includeUncontrolled: true })
+          .then((clients) =>
+            clients.forEach((c) => c.postMessage({ type: "NEW_VERSION" }))
+          )
+      )
   );
-  // Take control of all open clients
+  // Take control of all open clients immediately
   self.clients.claim();
 });
 
@@ -63,8 +70,14 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Everything else (shell, pages, static) → cache-first
-  event.respondWith(cacheFirst(request, SHELL_CACHE));
+  // Next.js hashed static assets → cache-first (safe: filenames are content-addressed)
+  if (url.pathname.startsWith("/_next/static/")) {
+    event.respondWith(cacheFirst(request, STATIC_CACHE));
+    return;
+  }
+
+  // HTML pages & other routes → network-first so users always get fresh content
+  event.respondWith(networkFirst(request, SHELL_CACHE));
 });
 
 // ── Strategies ────────────────────────────────────────────────────────────
