@@ -317,8 +317,9 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
         }
       >
         <div
+          key={`${mainRootId}-${orientation}`}
           ref={treeContentRef}
-          className="flex min-w-max flex-col items-center gap-16 pb-4"
+          className="flex min-w-max flex-col items-center gap-16 pb-4 animate-fade-in"
         >
           {forest.map((root) => (
             <TreeNodeSvg
@@ -345,8 +346,8 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
 
       {/* Export Preview Modal */}
       {previewOpen && previewImage && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 animate-scale-in">
             {/* Modal Header */}
             <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800">
               <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">

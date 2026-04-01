@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { TreeNode as TNode, TreePartnerGroup } from "@/lib/tree";
 
 // ─── Shared constants ──────────────────────────────────────────────────────────
@@ -487,19 +488,26 @@ function hRenderNode(layout: HLayoutNode, ox: number, oy: number, ctx: HRenderCt
         const fc = lg.childrenLayout[0], lc = lg.childrenLayout[lg.childrenLayout.length - 1];
         const vTop    = oy + fc.y + fc.anchorY;
         const vBottom = oy + lc.y + lc.anchorY;
-
-        // Always draw a vertical bar from the couple anchor down to the last child
-        // anchor (or up, if couple anchor is below). This connects the horizontal
-        // branch line to all children, including the single-child case.
         const barTop    = Math.min(coupleAnchorAbsY, vTop);
         const barBottom = Math.max(coupleAnchorAbsY, vBottom);
-        els.push(<line key={`vb-${nodeKey}`} x1={childrenX} y1={barTop} x2={childrenX} y2={barBottom} stroke={LINE_CLR} strokeWidth={2} />);
-
+        const hChildEls: React.ReactNode[] = [];
+        hChildEls.push(<line key={`vb-${nodeKey}`} x1={childrenX} y1={barTop} x2={childrenX} y2={barBottom} stroke={LINE_CLR} strokeWidth={2} />);
         for (const cl of lg.childrenLayout) {
           const clAbsY = oy + cl.y + cl.anchorY;
-          els.push(<line key={`hs-${nodeKey}-${cl.node.member.id}`} x1={childrenX} y1={clAbsY} x2={childrenX + V_STUB} y2={clAbsY} stroke={LINE_CLR} strokeWidth={2} />);
-          els.push(...hRenderNode(cl, childrenX + V_STUB, oy + cl.y, ctx));
+          hChildEls.push(<line key={`hs-${nodeKey}-${cl.node.member.id}`} x1={childrenX} y1={clAbsY} x2={childrenX + V_STUB} y2={clAbsY} stroke={LINE_CLR} strokeWidth={2} />);
+          hChildEls.push(...hRenderNode(cl, childrenX + V_STUB, oy + cl.y, ctx));
         }
+        els.push(
+          <motion.g
+            key={`hcg-${nodeKey}`}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -8 }}
+            transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
+          >
+            {hChildEls}
+          </motion.g>
+        );
       }
     }
   }
@@ -518,6 +526,7 @@ export default function TreeNodeSvg({
   orientation?: "vertical" | "horizontal";
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
   const onToggle = useCallback((key: string) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
@@ -534,9 +543,17 @@ export default function TreeNodeSvg({
     const svgH = hLayout.height + PADDING * 2;
     const ctx: HRenderCtx = { highlightId, collapsed, onToggle };
     return (
-      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ overflow: "visible", display: "block" }}>
-        {hRenderNode(hLayout, PADDING, PADDING, ctx)}
-      </svg>
+      <motion.svg
+        width={svgW} height={svgH}
+        viewBox={`0 0 ${svgW} ${svgH}`}
+        animate={{ width: svgW, height: svgH }}
+        transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+        style={{ overflow: "visible", display: "block" }}
+      >
+        <AnimatePresence>
+          {hRenderNode(hLayout, PADDING, PADDING, ctx)}
+        </AnimatePresence>
+      </motion.svg>
     );
   }
 
@@ -545,8 +562,16 @@ export default function TreeNodeSvg({
   const svgH = vComputeHeight(vLayout, collapsed) + PADDING * 2;
   const ctx: VRenderCtx = { highlightId, collapsed, onToggle };
   return (
-    <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ overflow: "visible", display: "block" }}>
-      {vRenderNode(vLayout, PADDING, PADDING, ctx)}
-    </svg>
+    <motion.svg
+      width={svgW} height={svgH}
+      viewBox={`0 0 ${svgW} ${svgH}`}
+      animate={{ width: svgW, height: svgH }}
+      transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+      style={{ overflow: "visible", display: "block" }}
+    >
+      <AnimatePresence>
+        {vRenderNode(vLayout, PADDING, PADDING, ctx)}
+      </AnimatePresence>
+    </motion.svg>
   );
 }

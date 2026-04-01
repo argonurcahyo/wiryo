@@ -26,7 +26,7 @@ export default function MemberCard({
     .toUpperCase() || "?";
 
   return (
-    <div className="group relative flex flex-col rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:border-emerald-200 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-emerald-900/50">
+    <div className="group relative flex flex-col rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-emerald-200 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:border-emerald-900/50">
       
       {/* Top Header: Avatar, Name & Actions */}
       <div className="flex items-start justify-between gap-4">

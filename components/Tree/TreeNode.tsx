@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Minus, X } from "lucide-react";
 import type { TreeNode as TNode, TreePartnerGroup } from "@/lib/tree";
 
@@ -18,7 +19,7 @@ function MemberCard({
   isHighlighted: boolean;
 }) {
   const baseClasses =
-    "relative z-10 inline-flex w-36 flex-col items-center justify-center rounded-xl border px-2 py-2 text-center shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md";
+    "relative z-10 inline-flex w-36 flex-col items-center justify-center rounded-xl border px-2 py-2 text-center shadow-sm transition-all duration-200 hover:-translate-y-1 hover:shadow-lg hover:scale-105 active:scale-95";
 
   const colorClass = isHighlighted
     ? "border-emerald-500 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-500/20 dark:bg-emerald-900/40 dark:text-emerald-100 dark:border-emerald-400"
@@ -78,7 +79,7 @@ function ToggleButton({
         type="button"
         onClick={onToggle}
         title={collapsed ? "Tampilkan keturunan" : "Sembunyikan keturunan"}
-        className="relative z-10 flex h-5 w-5 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-500 shadow-sm transition hover:scale-110 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"
+        className="relative z-10 flex h-5 w-5 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-500 shadow-sm transition-all duration-150 hover:scale-110 hover:border-emerald-400 hover:text-emerald-600 active:scale-90 active:bg-emerald-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-400 dark:active:bg-emerald-900/30"
       >
         {collapsed ? <Plus className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
       </button>
@@ -149,53 +150,62 @@ function ChildrenSection({
         <div className="h-5 w-px bg-zinc-300 dark:bg-zinc-600" />
       )}
 
-      {!collapsed && (
-        <>
-          {/* Garis dari toggle ke H-bar */}
-          <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-600" />
-
-          {/* Distribusi anak — geser kiri agar CHILD_ANCHOR anak[0] di x=0 */}
-          <div
-            className="flex items-start gap-0"
-            style={{ marginLeft: `${-CHILD_ANCHOR_REM}rem` }}
+      <AnimatePresence initial={false}>
+        {!collapsed && (
+          <motion.div
+            key="children"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: "hidden" }}
           >
-            {group.children.map((child, idx) => {
-              const isFirst = idx === 0;
-              const isLast  = idx === group.children.length - 1;
-              const isOnly  = group.children.length === 1;
+            {/* Garis dari toggle ke H-bar */}
+            <div className="h-4 w-px bg-zinc-300 dark:bg-zinc-600" />
 
-              return (
-                <div
-                  key={`${group.relationshipId ?? group.partner?.id ?? "single"}-${child.member.id}`}
-                  className="relative flex flex-col items-start"
-                >
-                  <div className="relative h-4 w-full">
-                    {!isOnly && !isFirst && (
+            {/* Distribusi anak — geser kiri agar CHILD_ANCHOR anak[0] di x=0 */}
+            <div
+              className="flex items-start gap-0"
+              style={{ marginLeft: `${-CHILD_ANCHOR_REM}rem` }}
+            >
+              {group.children.map((child, idx) => {
+                const isFirst = idx === 0;
+                const isLast  = idx === group.children.length - 1;
+                const isOnly  = group.children.length === 1;
+
+                return (
+                  <div
+                    key={`${group.relationshipId ?? group.partner?.id ?? "single"}-${child.member.id}`}
+                    className="relative flex flex-col items-start"
+                  >
+                    <div className="relative h-4 w-full">
+                      {!isOnly && !isFirst && (
+                        <div
+                          className="absolute top-0 h-px bg-zinc-300 dark:bg-zinc-600"
+                          style={{ left: 0, right: `calc(100% - ${childAnchor})` }}
+                        />
+                      )}
                       <div
-                        className="absolute top-0 h-px bg-zinc-300 dark:bg-zinc-600"
-                        style={{ left: 0, right: `calc(100% - ${childAnchor})` }}
+                        className="absolute top-0 h-4 w-px bg-zinc-300 dark:bg-zinc-600"
+                        style={{ left: childAnchor, transform: "translateX(-50%)" }}
                       />
-                    )}
-                    <div
-                      className="absolute top-0 h-4 w-px bg-zinc-300 dark:bg-zinc-600"
-                      style={{ left: childAnchor, transform: "translateX(-50%)" }}
-                    />
-                    {!isOnly && !isLast && (
-                      <div
-                        className="absolute top-0 right-0 h-px bg-zinc-300 dark:bg-zinc-600"
-                        style={{ left: childAnchor }}
-                      />
-                    )}
+                      {!isOnly && !isLast && (
+                        <div
+                          className="absolute top-0 right-0 h-px bg-zinc-300 dark:bg-zinc-600"
+                          style={{ left: childAnchor }}
+                        />
+                      )}
+                    </div>
+                    <div className="px-1 sm:px-2">
+                      <TreeNode node={child} highlightId={highlightId} />
+                    </div>
                   </div>
-                  <div className="px-1 sm:px-2">
-                    <TreeNode node={child} highlightId={highlightId} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </>
-      )}
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

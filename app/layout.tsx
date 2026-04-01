@@ -16,11 +16,53 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://wiryo.vercel.app";
+
 export const metadata: Metadata = {
-  title: { default: "Wiryo – Family Tree", template: "%s | Wiryo" },
-  description: "A multi-generation family tree app built with Next.js & Turso.",
+  metadataBase: new URL(APP_URL),
+  title: { default: "Silsilah Keluarga Mbah Wiryo", template: "%s | Wiryo" },
+  description:
+    "Visualisasi silsilah secara interaktif, dan ekspor ke PNG/PDF — dibangun dengan Next.js & Turso.",
+  keywords: [
+    "family tree",
+    "pohon keluarga",
+    "silsilah",
+    "genealogi",
+    "wiryo",
+    "next.js",
+  ],
+  authors: [{ name: "Wiryo" }],
+  creator: "Wiryo",
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, statusBarStyle: "default", title: "Wiryo" },
+  openGraph: {
+    type: "website",
+    url: APP_URL,
+    siteName: "Wiryo",
+    title: "Wiryo – Family Tree",
+    description:
+      "Aplikasi pohon keluarga multi-generasi: kelola anggota, visualisasikan silsilah interaktif, dan ekspor ke PNG/PDF.",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Wiryo – Family Tree App",
+      },
+    ],
+    locale: "id_ID",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Wiryo – Family Tree",
+    description:
+      "Aplikasi pohon keluarga multi-generasi: kelola anggota, visualisasikan silsilah interaktif, dan ekspor ke PNG/PDF.",
+    images: ["/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export const viewport: Viewport = {

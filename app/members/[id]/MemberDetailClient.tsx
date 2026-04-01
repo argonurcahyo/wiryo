@@ -8,6 +8,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import type { Member } from "@/lib/members";
 import type { MemberPartnerSummary } from "@/lib/relationships";
 import MemberForm from "@/components/Member/MemberForm";
@@ -121,7 +122,12 @@ export default function MemberDetailClient({
   }
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      className="space-y-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.25, ease: "easeOut" }}
+    >
       <nav className="text-sm text-zinc-500 dark:text-zinc-400">
         <Link href="/" className="hover:underline">Home</Link>
         {" / "}
@@ -138,7 +144,12 @@ export default function MemberDetailClient({
         />
       ) : (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+          <motion.div
+            className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+          >
             <div className="flex items-start justify-between gap-4">
               <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
                 {member.name}
@@ -210,9 +221,14 @@ export default function MemberDetailClient({
                 </div>
               )}
             </dl>
-          </div>
+          </motion.div>
 
-          <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+          <motion.div
+            className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.08, ease: [0.4, 0, 0.2, 1] }}
+          >
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Relasi Pasangan</h2>
@@ -317,7 +333,7 @@ export default function MemberDetailClient({
                 ))
               )}
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
 
@@ -329,6 +345,6 @@ export default function MemberDetailClient({
           ← Back to all members
         </Link>
       </div>
-    </div>
+    </motion.div>
   );
 }

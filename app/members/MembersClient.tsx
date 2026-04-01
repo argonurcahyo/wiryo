@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
 import { UserPlus, X, Users } from "lucide-react";
 import type { Member } from "@/lib/members";
 import MemberCard from "@/components/Member/MemberCard";
@@ -19,14 +20,6 @@ export default function MembersClient({
   const router = useRouter();
   const[members, setMembers] = useState<Member[]>(initialMembers);
   const [showForm, setShowForm] = useState(defaultOpen);
-  const formRef = useRef<HTMLDivElement>(null);
-
-  // Scroll the form into view whenever it opens
-  useEffect(() => {
-    if (showForm && formRef.current) {
-      formRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [showForm]);
 
   const memberMap = new Map(members.map((m) => [m.id, m]));
 
@@ -87,18 +80,22 @@ export default function MembersClient({
       </div>
 
       {/* Form Container with visual grouping */}
-      <div
-        ref={formRef}
-        className={
-          showForm
-            ? "animate-in fade-in slide-in-from-top-4 duration-300"
-            : "hidden"
-        }
-      >
-        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 sm:p-6 dark:border-emerald-900/30 dark:bg-emerald-900/10">
-          <MemberForm allMembers={members} onSuccess={handleAddSuccess} />
-        </div>
-      </div>
+      <AnimatePresence initial={false}>
+        {showForm && (
+          <motion.div
+            key="add-form"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
+            style={{ overflow: "hidden" }}
+          >
+            <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 sm:p-6 dark:border-emerald-900/30 dark:bg-emerald-900/10">
+              <MemberForm allMembers={members} onSuccess={handleAddSuccess} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Content */}
       {members.length === 0 ? (
@@ -114,17 +111,33 @@ export default function MembersClient({
           </p>
         </div>
       ) : (
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {members.map((m) => (
-            <MemberCard
-              key={m.id}
-              member={m}
-              fatherName={m.fatherId ? memberMap.get(m.fatherId)?.name : null}
-              motherName={m.motherId ? memberMap.get(m.motherId)?.name : null}
-              onDelete={handleDelete}
-            />
-          ))}
-        </div>
+        <motion.div
+          className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+          initial="hidden"
+          animate="visible"
+          variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.07 } } }}
+        >
+          <AnimatePresence>
+            {members.map((m) => (
+              <motion.div
+                key={m.id}
+                layout
+                variants={{
+                  hidden: { opacity: 0, y: 14 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.4, 0, 0.2, 1] } },
+                }}
+                exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
+              >
+                <MemberCard
+                  member={m}
+                  fatherName={m.fatherId ? memberMap.get(m.fatherId)?.name : null}
+                  motherName={m.motherId ? memberMap.get(m.motherId)?.name : null}
+                  onDelete={handleDelete}
+                />
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </motion.div>
       )}
     </div>
   );
