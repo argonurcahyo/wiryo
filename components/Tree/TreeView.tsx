@@ -1,30 +1,69 @@
-/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable @next/next/no-img-element */
 /**
  * components/Tree/TreeView.tsx
  * Renders the full family tree from a flat member list.
- * Builds the tree client-side using lib/tree helpers.
  */
 
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { toPng } from "html-to-image";
+import { jsPDF } from "jspdf";
 import { buildTree, getTreeRoots } from "@/lib/tree";
 import type { Member } from "@/lib/members";
 import type { PartnerRelationship } from "@/lib/relationships";
 import TreeNode from "./TreeNode";
+import {
+  Search,
+  Maximize,
+  Minimize,
+  Download,
+  Image as ImageIcon,
+  FileText,
+  X,
+  Filter,
+  Users,
+  Loader2
+} from "lucide-react";
 
 interface TreeViewProps {
   members: Member[];
   relationships: PartnerRelationship[];
 }
 
+function getExportFileBaseName(mainRootId: string, rootName?: string) {
+  const date = new Date().toISOString().slice(0, 10);
+  const name = (rootName ?? "all")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  return `family-tree-${mainRootId === "all" ? "all" : name || "root"}-${date}`;
+}
+
+function getImageSize(dataUrl: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.width, height: img.height });
+    img.onerror = () => reject(new Error("Failed to read image size."));
+    img.src = dataUrl;
+  });
+}
+
 export default function TreeView({ members, relationships }: TreeViewProps) {
   const [search, setSearch] = useState("");
   const [mainRootId, setMainRootId] = useState("all");
-  const [fullscreen, setFullscreen] = useState(false);
+  const[fullscreen, setFullscreen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const[isPreparingPreview, setIsPreparingPreview] = useState(false);
+
+  const treeContentRef = useRef<HTMLDivElement | null>(null);
   const restoredRef = useRef(false);
 
-  const rootOptions = useMemo(() => getTreeRoots(members, relationships), [members, relationships]);
+  const rootOptions = useMemo(
+    () => getTreeRoots(members, relationships),
+    [members, relationships]
+  );
 
   useEffect(() => {
     if (restoredRef.current) return;
@@ -38,12 +77,16 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
 
   useEffect(() => {
     document.body.style.overflow = fullscreen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [fullscreen]);
 
   const forest = useMemo(
-    () => buildTree(members, relationships, { mainRootId: mainRootId === "all" ? undefined : mainRootId }),
-    [members, relationships, mainRootId]
+    () =>
+      buildTree(members, relationships, {
+        mainRootId: mainRootId === "all" ? undefined : mainRootId,
+      }),[members, relationships, mainRootId]
   );
 
   const highlightId = useMemo(() => {
@@ -53,75 +96,220 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
     return found?.id;
   }, [search, members]);
 
+  async function captureTreeImage(): Promise<string> {
+    const node = treeContentRef.current;
+    if (!node) throw new Error("Tree container not found.");
+
+    const width = Math.max(node.scrollWidth, node.clientWidth);
+    const height = Math.max(node.scrollHeight, node.clientHeight);
+
+    // Remove dark class so light-mode base applies, then wait for repaint
+    const html = document.documentElement;
+    const wasDark = html.classList.contains("dark");
+    if (wasDark) html.classList.remove("dark");
+    await new Promise<void>((r) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => r()))
+    );
+
+    // Directly override inline styles for vibrant white-paper appearance.
+    interface Saved {
+      text: string;
+    }
+    const saved = new Map<HTMLElement, Saved>();
+
+    const applyOverride = (el: HTMLElement) => {
+      const cls = el.classList;
+      const save: Saved = { text: el.style.cssText };
+      let css = "";
+
+      // Preserve TreeNode color classes for export
+      if (cls.contains("bg-blue-50")) { css += "background-color: #3b82f6 !important; "; }
+      else if (cls.contains("bg-rose-50")) { css += "background-color: #f43f5e !important; "; }
+      else if (cls.contains("bg-emerald-50")) { css += "background-color: #10b981 !important; "; }
+      else if (cls.contains("bg-white")) { css += "background-color: #e4e4e7 !important; "; }
+
+      if (cls.contains("bg-zinc-300")) { css += "background-color: #3f3f46 !important; "; }
+      if (cls.contains("border-blue-200")) { css += "border-color: #1d4ed8 !important; "; }
+      if (cls.contains("border-rose-200")) { css += "border-color: #be123c !important; "; }
+      if (cls.contains("border-zinc-200")) { css += "border-color: #71717a !important; "; }
+      if (cls.contains("border-zinc-300")) { css += "border-color: #52525b !important; "; }
+
+      if (cls.contains("text-blue-900")) { css += "color: #ffffff !important; "; }
+      if (cls.contains("text-rose-900")) { css += "color: #ffffff !important; "; }
+      if (cls.contains("text-emerald-900")) { css += "color: #ffffff !important; "; }
+      if (cls.contains("text-zinc-900")) { css += "color: #09090b !important; "; }
+      if (cls.contains("text-zinc-400")) { css += "color: #3f3f46 !important; "; }
+      if (cls.contains("text-zinc-500")) { css += "color: #27272a !important; "; }
+
+      if (css) {
+        el.style.cssText = css;
+        saved.set(el, save);
+      }
+    };
+
+    applyOverride(node);
+    node.querySelectorAll<HTMLElement>("*").forEach(applyOverride);
+
+    try {
+      return await toPng(node, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        width,
+        height,
+        style: { width: `${width}px`, height: `${height}px` },
+      });
+    } finally {
+      saved.forEach((save, el) => {
+        el.style.cssText = save.text;
+      });
+      if (wasDark) html.classList.add("dark");
+    }
+  }
+
+  async function handleOpenPreview() {
+    setIsPreparingPreview(true);
+    try {
+      const image = await captureTreeImage();
+      setPreviewImage(image);
+      setPreviewOpen(true);
+    } catch {
+      alert("Gagal membuat preview export.");
+    } finally {
+      setIsPreparingPreview(false);
+    }
+  }
+
+  function handleDownloadPng() {
+    if (!previewImage) return;
+    const rootName = rootOptions.find((r) => r.id === mainRootId)?.name;
+    const fileBaseName = getExportFileBaseName(mainRootId, rootName);
+
+    const link = document.createElement("a");
+    link.href = previewImage;
+    link.download = `${fileBaseName}.png`;
+    link.click();
+  }
+
+  async function handleDownloadPdf() {
+    if (!previewImage) return;
+    try {
+      const { width: imgW, height: imgH } = await getImageSize(previewImage);
+
+      // A1 landscape in points (1 mm = 2.8346 pt): 841 × 594 mm
+      const PAGE_W = 2383.94;
+      const PAGE_H = 1683.78;
+
+      const pdf = new jsPDF({
+        orientation: "landscape",
+        unit: "pt",
+        format: "a1",
+      });
+
+      const scale = Math.min(PAGE_W / imgW, PAGE_H / imgH);
+      const drawW = imgW * scale;
+      const drawH = imgH * scale;
+      const offsetX = (PAGE_W - drawW) / 2;
+      const offsetY = (PAGE_H - drawH) / 2;
+
+      pdf.addImage(previewImage, "PNG", offsetX, offsetY, drawW, drawH);
+
+      const rootName = rootOptions.find((r) => r.id === mainRootId)?.name;
+      const fileBaseName = getExportFileBaseName(mainRootId, rootName);
+      pdf.save(`${fileBaseName}.pdf`);
+    } catch {
+      alert("Gagal export PDF.");
+    }
+  }
+
   if (members.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 py-16 text-center dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-200 bg-transparent py-16 text-center dark:border-zinc-800">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-zinc-100 dark:bg-zinc-800/50">
+          <Users className="h-7 w-7 text-zinc-400 dark:text-zinc-500" />
+        </div>
         <p className="text-zinc-500 dark:text-zinc-400">
-          No members yet. Add the first person to your family tree!
+          No members yet. Add the first person to start your tree!
         </p>
       </div>
     );
   }
 
   const controlsBar = (
-    <div className={fullscreen
-      ? "shrink-0 flex flex-col gap-3 border-b border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur-sm dark:border-zinc-700 dark:bg-zinc-950/95 md:flex-row md:items-end md:justify-between"
-      : "flex flex-col gap-3 md:flex-row md:items-end md:justify-between"
-    }>
-      <div>
-        <label className="block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-          View Option
-        </label>
-        <select
-          value={mainRootId}
-          onChange={(e) => {
-            setMainRootId(e.target.value);
-            localStorage.setItem("wiryo-main-root", e.target.value);
-          }}
-          className="mt-1 w-full min-w-0 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 md:min-w-70"
-        >
-          <option value="all">Semua Tree</option>
-          {rootOptions.map((root) => (
-            <option key={root.id} value={root.id}>
-              Main Tree: {root.name}{root.birthDate ? ` (${root.birthDate})` : ""}
-            </option>
-          ))}
-        </select>
-        {!fullscreen && (
-          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
-            Pilih root utama untuk menampilkan satu tree saja.
-          </p>
-        )}
+    <div
+      className={
+        fullscreen
+          ? "shrink-0 flex flex-col gap-4 border-b border-zinc-200 bg-white/95 px-6 py-4 backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/95 md:flex-row md:items-center md:justify-between"
+          : "mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between"
+      }
+    >
+      {/* Left: View Options */}
+      <div className="flex items-center gap-3">
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" />
+          <select
+            value={mainRootId}
+            onChange={(e) => {
+              setMainRootId(e.target.value);
+              localStorage.setItem("wiryo-main-root", e.target.value);
+            }}
+            className="h-10 w-full appearance-none rounded-xl border border-zinc-200 bg-zinc-50 pl-9 pr-10 text-sm font-medium text-zinc-700 shadow-sm transition focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 md:min-w-[200px]"
+          >
+            <option value="all">View All Trees</option>
+            {rootOptions.map((root) => (
+              <option key={root.id} value={root.id}>
+                Main: {root.name} {root.birthDate ? `(${root.birthDate})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <div className="flex items-end gap-2">
-        <div>
+      {/* Right: Actions */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Search */}
+        <div className="relative w-full sm:w-auto">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari nama…"
-            className="w-full max-w-sm rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder-zinc-500"
+            placeholder="Search name..."
+            className="h-10 w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-9 pr-4 text-sm text-zinc-900 shadow-sm transition placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 sm:w-64"
           />
           {search && !highlightId && (
-            <p className="mt-1 text-xs text-zinc-400">Tidak ditemukan.</p>
+            <p className="absolute -bottom-5 left-1 text-[10px] text-rose-500 dark:text-rose-400">
+              Not found
+            </p>
           )}
         </div>
 
+        {/* Export Button */}
+        <button
+          type="button"
+          onClick={handleOpenPreview}
+          disabled={isPreparingPreview}
+          className="flex h-10 items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-medium text-zinc-700 shadow-sm transition hover:bg-zinc-50 hover:text-emerald-600 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-emerald-400"
+        >
+          {isPreparingPreview ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4" />
+          )}
+          <span>Export</span>
+        </button>
+
+        {/* Fullscreen Toggle */}
         <button
           type="button"
           onClick={() => setFullscreen((v) => !v)}
-          title={fullscreen ? "Keluar fullscreen" : "Fullscreen"}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-300 bg-white text-zinc-500 transition hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+          title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-200 bg-white text-zinc-500 shadow-sm transition hover:bg-zinc-50 hover:text-emerald-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-emerald-400"
         >
           {fullscreen ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-            </svg>
+            <Minimize className="h-4 w-4" />
           ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
-            </svg>
+            <Maximize className="h-4 w-4" />
           )}
         </button>
       </div>
@@ -129,14 +317,26 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
   );
 
   return (
-    <div className={fullscreen ? "fixed inset-0 z-50 flex flex-col bg-white dark:bg-zinc-950" : "space-y-4"}>
+    <div
+      className={
+        fullscreen
+          ? "fixed inset-0 z-50 flex flex-col bg-zinc-50 dark:bg-zinc-950"
+          : "relative"
+      }
+    >
       {controlsBar}
 
-      <div className={fullscreen
-        ? "flex-1 overflow-auto p-6"
-        : "overflow-x-auto rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900"
-      }>
-        <div className="flex min-w-max flex-col items-center gap-10">
+      <div
+        className={
+          fullscreen
+            ? "flex-1 overflow-auto p-8"
+            : "overflow-x-auto rounded-2xl bg-zinc-50/50 p-6 dark:bg-zinc-900/20"
+        }
+      >
+        <div
+          ref={treeContentRef}
+          className="flex min-w-max flex-col items-center gap-16 pb-4"
+        >
           {forest.map((root) => (
             <TreeNode
               key={root.member.id}
@@ -148,10 +348,67 @@ export default function TreeView({ members, relationships }: TreeViewProps) {
       </div>
 
       {!fullscreen && (
-        <p className="text-right text-xs text-zinc-400 dark:text-zinc-500">
-          {members.length} member{members.length !== 1 ? "s" : ""} ·{" "}
-          {forest.length} tree ditampilkan · {rootOptions.length} total root
-        </p>
+        <div className="mt-4 flex items-center justify-between text-xs text-zinc-400 dark:text-zinc-500">
+          <p>
+            {members.length} member{members.length !== 1 ? "s" : ""}
+          </p>
+          <p>
+            {forest.length} tree{forest.length !== 1 ? "s" : ""} ·{" "}
+            {rootOptions.length} total root{rootOptions.length !== 1 ? "s" : ""}
+          </p>
+        </div>
+      )}
+
+      {/* Export Preview Modal */}
+      {previewOpen && previewImage && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800">
+              <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                Preview Export
+              </h3>
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(false)}
+                className="rounded-full p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-300 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Image Area */}
+            <div className="flex-1 overflow-auto bg-zinc-100/50 p-6 dark:bg-zinc-950/50">
+              <div className="rounded-xl border border-zinc-200 bg-white p-2 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+                <img
+                  src={previewImage}
+                  alt="Family tree preview"
+                  className="mx-auto h-auto max-w-full rounded"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer (Actions) */}
+            <div className="flex items-center justify-end gap-3 border-t border-zinc-100 px-6 py-4 dark:border-zinc-800 bg-white dark:bg-zinc-900">
+              <button
+                type="button"
+                onClick={handleDownloadPng}
+                className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50 hover:text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
+              >
+                <ImageIcon className="h-4 w-4 text-emerald-500" />
+                Download PNG
+              </button>
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                className="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 dark:focus:ring-offset-zinc-900"
+              >
+                <FileText className="h-4 w-4" />
+                Download PDF
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
